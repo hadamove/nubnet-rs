@@ -1,5 +1,7 @@
 use std::iter::once;
 
+use rand::Rng;
+
 #[allow(dead_code)]
 enum Activator {
     Identity,
@@ -40,8 +42,10 @@ struct Layer {
 
 impl Layer {
     fn new(size: usize, input_size: usize, activator: Activator) -> Self {
+        let mut thread_rng = rand::thread_rng();
+
         let input_weights: Vec<Vec<f64>> = (0..size)
-            .map(|_| (0..input_size).map(|_| 2.0 * rand::random::<f64>() - 1.0).collect())
+            .map(|_| (0..input_size).map(|_| thread_rng.gen()).collect())
             .collect();
 
         Self {
