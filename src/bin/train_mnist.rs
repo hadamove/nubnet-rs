@@ -26,6 +26,14 @@ fn main() -> Result<()> {
     let args = CliArguments::parse();
 
     let data = load_csv_data(&args.input_path)?;
+
+    // Transform data from 0..255 to 0..1
+    // TODO: Refactor this
+    let data: Vec<Vec<_>> = data
+        .into_iter()
+        .map(|row| row.into_iter().map(|x| x / 255.0).collect())
+        .collect();
+
     let labels = load_csv_labels(&args.labels_path)?;
 
     let mut network = SimpleNetwork::new(&[784, 128, 64, 10], args.learning_rate, args.momentum);
