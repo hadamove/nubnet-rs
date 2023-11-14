@@ -41,11 +41,7 @@ struct Layer {
 impl Layer {
     fn new(size: usize, input_size: usize, activator: Activator) -> Self {
         let input_weights: Vec<Vec<f64>> = (0..size)
-            .map(|_| {
-                (0..input_size)
-                    .map(|_| 2.0 * rand::random::<f64>() - 1.0)
-                    .collect()
-            })
+            .map(|_| (0..input_size).map(|_| 2.0 * rand::random::<f64>() - 1.0).collect())
             .collect();
 
         Self {
@@ -67,19 +63,18 @@ pub struct SimpleNetwork {
 }
 
 impl SimpleNetwork {
-    pub fn new(shape: &[usize]) -> Self {
+    pub fn new(shape: &[usize], learning_rate: f64, momentum: f64) -> Self {
         assert!(shape.len() >= 2, "Network must have at least two layers");
 
         // Add one extra neuron to each layer to model bias
         let input_layer = Layer::new(shape[0] + 1, 0, Activator::Identity);
 
         // Hidden layers and output layer take input from previous layer
-        let remaining_layers =
-            (1..shape.len()).map(|l| Layer::new(shape[l] + 1, shape[l - 1] + 1, Activator::Tanh));
+        let remaining_layers = (1..shape.len()).map(|l| Layer::new(shape[l] + 1, shape[l - 1] + 1, Activator::Tanh));
 
         Self {
-            learning_rate: 0.1,
-            momentum: 0.01,
+            learning_rate,
+            momentum,
             layers: once(input_layer).chain(remaining_layers).collect(),
         }
     }
@@ -114,14 +109,11 @@ impl SimpleNetwork {
                 } else {
                     // For hidden layers, delta is the weighted sum of deltas from the layer above
                     (0..self.layers[l + 1].size)
-                        .map(|k| {
-                            self.layers[l + 1].delta[k] * self.layers[l + 1].input_weights[k][i]
-                        })
+                        .map(|k| self.layers[l + 1].delta[k] * self.layers[l + 1].input_weights[k][i])
                         .sum()
                 };
 
-                self.layers[l].delta[i] =
-                    self.layers[l].activator.prime(self.layers[l].potential[i]) * weighted_sum;
+                self.layers[l].delta[i] = self.layers[l].activator.prime(self.layers[l].potential[i]) * weighted_sum;
             });
         }
     }
@@ -130,10 +122,9 @@ impl SimpleNetwork {
         for l in 1..self.layers.len() {
             for i in 0..self.layers[l].size {
                 for j in 0..self.layers[l].input_weights[i].len() {
-                    self.layers[l].input_weights[i][j] += self.learning_rate
-                        * self.layers[l].delta[i]
-                        * self.layers[l - 1].activation[j]
-                        + self.momentum * -self.layers[l].previous_delta[i];
+                    self.layers[l].input_weights[i][j] +=
+                        self.learning_rate * self.layers[l].delta[i] * self.layers[l - 1].activation[j]
+                            + self.momentum * -self.layers[l].previous_delta[i];
                 }
             }
         }
@@ -168,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_xor() {
-        let mut network = SimpleNetwork::new(&[2, 4, 1]);
+        let mut network = SimpleNetwork::new(&[2, 4, 1], 0.1, 0.01);
 
         let data = [
             (&[0., 0.], &[0.]),
