@@ -13,9 +13,11 @@ struct CliArguments {
     #[arg(short, long, default_value = "data/fashion_mnist_test_labels.csv")]
     labels_path: String,
 
-    #[arg(short = 'r', long, default_value_t = 0.1)]
+    #[arg(short = 'r', long, default_value_t = 0.03)]
     learning_rate: f64,
-    #[arg(short, long, default_value_t = 0.0)]
+
+    // It seems to perform better without momentum
+    #[arg(short, long, default_value_t = 0.00)]
     momentum: f64,
     #[arg(short, long, default_value_t = 10)]
     epochs: usize,
@@ -46,7 +48,7 @@ fn main() -> Result<()> {
         network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
 
         // Show accuracy on 1000 random examples (should be separated from training data in the future)
-        if it % 10_000 == 0 {
+        if it % 10_000 == 9_999 {
             let mut correct = 0;
             for _ in 0..1000 {
                 let k = rand::random::<usize>() % data.len();
@@ -78,10 +80,7 @@ fn main() -> Result<()> {
         }
     }
 
-    println!(
-        "Final accuracy: {:.2}%",
-        correct as f64 / data.len() as f64 * 100.0
-    );
+    println!("Final accuracy: {:.2}%", correct as f64 / data.len() as f64 * 100.0);
 
     Ok(())
 }
@@ -102,9 +101,7 @@ fn one_hot_to_label(one_hot: &[f64]) -> usize {
 }
 
 fn load_csv_data(filename: &str) -> Result<Vec<Vec<f64>>> {
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .from_path(filename)?;
+    let mut reader = csv::ReaderBuilder::new().has_headers(false).from_path(filename)?;
 
     let data = reader
         .records()
