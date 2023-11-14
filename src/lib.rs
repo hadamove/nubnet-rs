@@ -78,12 +78,22 @@ impl SimpleNetwork {
         let input_layer = Layer::new(shape[0] + 1, 0, Activator::Identity);
 
         // Hidden layers and output layer take input from previous layer
-        let remaining_layers = (1..shape.len()).map(|l| Layer::new(shape[l] + 1, shape[l - 1] + 1, Activator::Tanh));
+        let remaining_layers =
+            (1..shape.len() - 1).map(|l| Layer::new(shape[l] + 1, shape[l - 1] + 1, Activator::Tanh));
+
+        let output_layer = Layer::new(
+            shape[shape.len() - 1] + 1,
+            shape[shape.len() - 2] + 1,
+            Activator::Identity,
+        );
 
         Self {
             learning_rate,
             momentum,
-            layers: once(input_layer).chain(remaining_layers).collect(),
+            layers: once(input_layer)
+                .chain(remaining_layers)
+                .chain(once(output_layer))
+                .collect(),
         }
     }
 
