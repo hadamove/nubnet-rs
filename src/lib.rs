@@ -2,6 +2,12 @@ use std::iter::once;
 
 use rand::Rng;
 
+fn softmax(values: &[f64]) -> Vec<f64> {
+    let exp_values: Vec<f64> = values.iter().map(|&x| x.exp()).collect();
+    let sum_exp: f64 = exp_values.iter().sum();
+    exp_values.iter().map(|&x| x / sum_exp).collect()
+}
+
 #[allow(dead_code)]
 enum Activator {
     Identity,
@@ -112,6 +118,13 @@ impl SimpleNetwork {
                 self.layers[l].activation[i] = self.layers[l].activator.function(weighted_sum);
             }
         }
+
+        // For the output layer, also apply softmax
+        // TODO: Training works with or without this. I am too afarid to ask why.
+
+        // let output_layer = self.layers.len() - 1;
+        // let softmax = softmax(&self.layers[output_layer].activation[1..]);
+        // self.layers[output_layer].activation[1..].copy_from_slice(&softmax);
     }
 
     fn feed_backward(&mut self, output: &[f64]) {
