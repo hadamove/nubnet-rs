@@ -13,13 +13,13 @@ struct CliArguments {
     #[arg(short, long, default_value = "data/fashion_mnist_test_labels.csv")]
     labels_path: String,
 
-    #[arg(short = 'r', long, default_value_t = 0.03)]
+    #[arg(short = 'r', long, default_value_t = 0.01)]
     learning_rate: f64,
 
     // It seems to perform better without momentum
     #[arg(short, long, default_value_t = 0.00)]
     momentum: f64,
-    #[arg(short, long, default_value_t = 10)]
+    #[arg(short, long, default_value_t = 30)]
     epochs: usize,
 }
 
