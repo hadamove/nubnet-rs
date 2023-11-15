@@ -122,9 +122,9 @@ impl SimpleNetwork {
         // For the output layer, also apply softmax
         // TODO: Training works with or without this. I am too afarid to ask why.
 
-        // let output_layer = self.layers.len() - 1;
-        // let softmax = softmax(&self.layers[output_layer].activation[1..]);
-        // self.layers[output_layer].activation[1..].copy_from_slice(&softmax);
+        let output_layer = self.layers.len() - 1;
+        let softmax = softmax(&self.layers[output_layer].activation[1..]);
+        self.layers[output_layer].activation[1..].copy_from_slice(&softmax);
     }
 
     fn feed_backward(&mut self, output: &[f64]) {
