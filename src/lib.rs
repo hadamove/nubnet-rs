@@ -2,8 +2,9 @@ use std::iter::once;
 
 use rand::Rng;
 
-enum Activator {
+pub enum Activator {
     Identity,
+    ReLU,
     Tanh,
 }
 
@@ -11,6 +12,7 @@ impl Activator {
     fn function(&self, x: f64) -> f64 {
         match self {
             Activator::Identity => x,
+            Activator::ReLU => x.max(0.0),
             Activator::Tanh => x.tanh(),
         }
     }
@@ -18,19 +20,24 @@ impl Activator {
     fn prime(&self, x: f64) -> f64 {
         match self {
             Activator::Identity => 1.0,
+            Activator::ReLU => (x > 0.0) as u8 as f64,
             Activator::Tanh => 1.0 - self.function(x).powi(2),
         }
     }
 }
 
-enum OutputTransformer {
+#[derive(Default)]
+pub enum OutputTransform {
+    #[default]
+    Identity,
     Softmax,
 }
 
-impl OutputTransformer {
+impl OutputTransform {
     fn apply(&self, values: &mut [f64]) {
         match self {
-            OutputTransformer::Softmax => {
+            OutputTransform::Identity => {}
+            OutputTransform::Softmax => {
                 let exp_sum: f64 = values.iter().map(|&x| x.exp()).sum();
                 values.iter_mut().for_each(|x| *x = x.exp() / exp_sum);
             }
@@ -70,36 +77,28 @@ impl Layer {
     }
 }
 
+#[derive(Default)]
 pub struct SimpleNetwork {
     layers: Vec<Layer>,
     learning_rate: f64,
-    output_transformer: OutputTransformer,
+    output_transform: OutputTransform,
 }
 
 impl SimpleNetwork {
-    pub fn new(shape: &[usize], learning_rate: f64) -> Self {
-        assert!(shape.len() >= 2, "Network must have at least two layers");
+    pub fn with_layer(mut self, size: usize, activator: Activator) -> Self {
+        let input_size = self.layers.last().map_or(0, |l| l.size);
+        self.layers.push(Layer::new(size + 1, input_size, activator)); // Plus one for the bias neuron
+        self
+    }
 
-        // Add one extra neuron to each layer to model bias
-        let input_layer = Layer::new(shape[0] + 1, 0, Activator::Identity);
+    pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
+        self.learning_rate = learning_rate;
+        self
+    }
 
-        // Hidden layers and output layer take input from previous layer
-        let hidden_layers = (1..shape.len() - 1).map(|l| Layer::new(shape[l] + 1, shape[l - 1] + 1, Activator::Tanh));
-
-        let output_layer = Layer::new(
-            shape[shape.len() - 1] + 1,
-            shape[shape.len() - 2] + 1,
-            Activator::Identity,
-        );
-
-        Self {
-            learning_rate,
-            layers: once(input_layer)
-                .chain(hidden_layers)
-                .chain(once(output_layer))
-                .collect(),
-            output_transformer: OutputTransformer::Softmax,
-        }
+    pub fn with_transform(mut self, transformer: OutputTransform) -> Self {
+        self.output_transform = transformer;
+        self
     }
 
     fn feed_forward(&mut self, input: &[f64]) {
@@ -118,8 +117,9 @@ impl SimpleNetwork {
             }
         }
 
+        // Apply transform to the output layer
         let output_layer = self.layers.len() - 1;
-        self.output_transformer
+        self.output_transform
             .apply(&mut self.layers[output_layer].activation[1..]);
     }
 
@@ -177,13 +177,17 @@ impl SimpleNetwork {
 
 #[cfg(test)]
 mod tests {
-    use super::SimpleNetwork;
+    use super::{Activator, SimpleNetwork};
     use more_asserts::*;
     use rand::{distributions::Uniform, Rng};
 
     #[test]
     fn test_xor() {
-        let mut network = SimpleNetwork::new(&[2, 4, 1], 0.1);
+        let mut network = SimpleNetwork::default()
+            .with_layer(2, Activator::Identity)
+            .with_layer(2, Activator::Tanh)
+            .with_layer(1, Activator::Identity)
+            .with_learning_rate(0.1);
 
         let data = [
             (&[0., 0.], &[0.]),
