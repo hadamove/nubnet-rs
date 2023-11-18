@@ -14,7 +14,9 @@ impl Layer {
     pub(crate) fn new(size: usize, input_size: usize, activator: Activator) -> Self {
         let mut thread_rng = rand::thread_rng();
 
-        let input_weights: Vec<Vec<f64>> = (0..size)
+        let size_with_bias = size + 1; // +1 for bias neuron
+
+        let input_weights: Vec<Vec<f64>> = (0..size_with_bias)
             .map(|_| {
                 (0..input_size)
                     .map(|_| thread_rng.gen::<f64>() / input_size as f64)
@@ -23,10 +25,10 @@ impl Layer {
             .collect();
 
         Self {
-            size,
-            potential: vec![1.0; size],
-            activation: vec![1.0; size],
-            delta: vec![0.0; size],
+            size: size_with_bias,
+            potential: vec![1.0; size_with_bias],
+            activation: vec![1.0; size_with_bias],
+            delta: vec![0.0; size_with_bias],
             input_weights,
             activator,
         }
