@@ -10,15 +10,13 @@ const NUM_TRAINING_EXAMPLES: usize = 10_000;
 struct CliArguments {
     #[arg(short, long, default_value = "data/fashion_mnist_test_vectors.csv")]
     input_path: String,
+
     #[arg(short, long, default_value = "data/fashion_mnist_test_labels.csv")]
     labels_path: String,
 
     #[arg(short = 'r', long, default_value_t = 0.01)]
     learning_rate: f64,
 
-    // It seems to perform better without momentum
-    #[arg(short, long, default_value_t = 0.00)]
-    momentum: f64,
     #[arg(short, long, default_value_t = 30)]
     epochs: usize,
 }
@@ -38,12 +36,16 @@ fn main() -> Result<()> {
 
     let labels = load_csv_labels(&args.labels_path)?;
 
-    let mut network = SimpleNetwork::new(&[784, 128, 64, 10], args.learning_rate, args.momentum);
+    let mut network = SimpleNetwork::new(&[784, 256, 128, 10], args.learning_rate);
 
     // Very dumb training loop, record by record
     // TODO: shuffle the data and use batches
     for it in 0..args.epochs * NUM_TRAINING_EXAMPLES {
         let k = rand::random::<usize>() % data.len();
+
+        network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
+
+        network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
 
         network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
 
