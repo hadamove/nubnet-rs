@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
-
-use pv021_project::{Activator, OutputTransform, SimpleNetwork};
+use pv021_project::{
+    activators::{Activator, OutputTransform},
+    model::Model,
+};
 
 const NUM_CLASSES: usize = 10;
 const NUM_TRAINING_EXAMPLES: usize = 10_000;
@@ -36,7 +38,7 @@ fn main() -> Result<()> {
 
     let labels = load_csv_labels(&args.labels_path)?;
 
-    let mut network = SimpleNetwork::default()
+    let mut network = Model::default()
         .with_layer(784, Activator::Identity)
         .with_layer(128, Activator::Tanh)
         .with_layer(64, Activator::Tanh)
