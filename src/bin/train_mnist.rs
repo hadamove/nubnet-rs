@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 
-use pv021_project::SimpleNetwork;
+use pv021_project::{Activator, OutputTransform, SimpleNetwork};
 
 const NUM_CLASSES: usize = 10;
 const NUM_TRAINING_EXAMPLES: usize = 10_000;
@@ -36,7 +36,13 @@ fn main() -> Result<()> {
 
     let labels = load_csv_labels(&args.labels_path)?;
 
-    let mut network = SimpleNetwork::new(&[784, 256, 128, 10], args.learning_rate);
+    let mut network = SimpleNetwork::default()
+        .with_layer(784, Activator::Identity)
+        .with_layer(128, Activator::Tanh)
+        .with_layer(64, Activator::Tanh)
+        .with_layer(10, Activator::Identity)
+        .with_transform(OutputTransform::Softmax)
+        .with_learning_rate(args.learning_rate);
 
     // Very dumb training loop, record by record
     // TODO: shuffle the data and use batches
