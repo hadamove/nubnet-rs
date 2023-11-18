@@ -2,17 +2,8 @@ use std::iter::once;
 
 use rand::Rng;
 
-fn softmax(values: &[f64]) -> Vec<f64> {
-    let exp_values: Vec<f64> = values.iter().map(|&x| x.exp()).collect();
-    let sum_exp: f64 = exp_values.iter().sum();
-    exp_values.iter().map(|&x| x / sum_exp).collect()
-}
-
-#[allow(dead_code)]
 enum Activator {
     Identity,
-    Relu,
-    Sigmoid,
     Tanh,
 }
 
@@ -20,8 +11,6 @@ impl Activator {
     fn function(&self, x: f64) -> f64 {
         match self {
             Activator::Identity => x,
-            Activator::Relu => f64::max(0.0, x),
-            Activator::Sigmoid => 1.0 / (1.0 + x.exp()),
             Activator::Tanh => x.tanh(),
         }
     }
@@ -29,9 +18,22 @@ impl Activator {
     fn prime(&self, x: f64) -> f64 {
         match self {
             Activator::Identity => 1.0,
-            Activator::Relu => (x > 0.0) as usize as f64,
-            Activator::Sigmoid => self.function(x) * (1.0 - self.function(x)),
             Activator::Tanh => 1.0 - self.function(x).powi(2),
+        }
+    }
+}
+
+enum OutputTransformer {
+    Softmax,
+}
+
+impl OutputTransformer {
+    fn apply(&self, values: &mut [f64]) {
+        match self {
+            OutputTransformer::Softmax => {
+                let exp_sum: f64 = values.iter().map(|&x| x.exp()).sum();
+                values.iter_mut().for_each(|x| *x = x.exp() / exp_sum);
+            }
         }
     }
 }
@@ -41,7 +43,6 @@ struct Layer {
     potential: Vec<f64>,
     activation: Vec<f64>,
     delta: Vec<f64>,
-    previous_delta: Vec<f64>,
     input_weights: Vec<Vec<f64>>,
     activator: Activator,
 }
@@ -63,7 +64,6 @@ impl Layer {
             potential: vec![1.0; size],
             activation: vec![1.0; size],
             delta: vec![0.0; size],
-            previous_delta: vec![0.0; size],
             input_weights,
             activator,
         }
@@ -73,19 +73,18 @@ impl Layer {
 pub struct SimpleNetwork {
     layers: Vec<Layer>,
     learning_rate: f64,
-    momentum: f64,
+    output_transformer: OutputTransformer,
 }
 
 impl SimpleNetwork {
-    pub fn new(shape: &[usize], learning_rate: f64, momentum: f64) -> Self {
+    pub fn new(shape: &[usize], learning_rate: f64) -> Self {
         assert!(shape.len() >= 2, "Network must have at least two layers");
 
         // Add one extra neuron to each layer to model bias
         let input_layer = Layer::new(shape[0] + 1, 0, Activator::Identity);
 
         // Hidden layers and output layer take input from previous layer
-        let remaining_layers =
-            (1..shape.len() - 1).map(|l| Layer::new(shape[l] + 1, shape[l - 1] + 1, Activator::Tanh));
+        let hidden_layers = (1..shape.len() - 1).map(|l| Layer::new(shape[l] + 1, shape[l - 1] + 1, Activator::Tanh));
 
         let output_layer = Layer::new(
             shape[shape.len() - 1] + 1,
@@ -95,11 +94,11 @@ impl SimpleNetwork {
 
         Self {
             learning_rate,
-            momentum,
             layers: once(input_layer)
-                .chain(remaining_layers)
+                .chain(hidden_layers)
                 .chain(once(output_layer))
                 .collect(),
+            output_transformer: OutputTransformer::Softmax,
         }
     }
 
@@ -119,22 +118,17 @@ impl SimpleNetwork {
             }
         }
 
-        // For the output layer, also apply softmax
-        // TODO: Training works with or without this. I am too afarid to ask why.
-
         let output_layer = self.layers.len() - 1;
-        let softmax = softmax(&self.layers[output_layer].activation[1..]);
-        self.layers[output_layer].activation[1..].copy_from_slice(&softmax);
+        self.output_transformer
+            .apply(&mut self.layers[output_layer].activation[1..]);
     }
 
     fn feed_backward(&mut self, output: &[f64]) {
         for l in (1..self.layers.len()).rev() {
-            // Save previous delta for momentum
-            self.layers[l].previous_delta = self.layers[l].delta.clone();
-
             // Calculate delta for each neuron
             (0..self.layers[l].size).for_each(|i| {
                 let weighted_sum = if l == self.layers.len() - 1 {
+                    // TODO: bring this outside of for loop
                     // For output layer, delta is the difference between desired output and actual output
                     output[i] - self.layers[l].activation[i]
                 } else {
@@ -155,7 +149,6 @@ impl SimpleNetwork {
                 for j in 0..self.layers[l].input_weights[i].len() {
                     self.layers[l].input_weights[i][j] +=
                         self.learning_rate * self.layers[l].delta[i] * self.layers[l - 1].activation[j]
-                            + self.momentum * -self.layers[l].previous_delta[i];
                 }
             }
         }
@@ -190,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_xor() {
-        let mut network = SimpleNetwork::new(&[2, 4, 1], 0.1, 0.01);
+        let mut network = SimpleNetwork::new(&[2, 4, 1], 0.1);
 
         let data = [
             (&[0., 0.], &[0.]),
