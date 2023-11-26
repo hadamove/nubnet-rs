@@ -7,18 +7,24 @@ use anyhow::Result;
 use pv021_project::{activators::Activator, model::Model};
 
 const NUM_CLASSES: usize = 10;
-const NUM_TRAINING_EXAMPLES: usize = 10_000;
 
-const INPUT_PATH: &str = "data/fashion_mnist_test_vectors.csv";
-const LABELS_PATH: &str = "data/fashion_mnist_test_labels.csv";
+const TEST_VECTORS_PATH: &str = "data/fashion_mnist_test_vectors.csv";
+const TEST_LABELS_PATH: &str = "data/fashion_mnist_test_labels.csv";
 
-const LEARNING_RATE: f64 = 0.01;
-const EPOCHS: usize = 30;
+const TRAIN_VECTORS_PATH: &str = "data/fashion_mnist_train_vectors.csv";
+const TRAIN_LABELS_PATH: &str = "data/fashion_mnist_train_labels.csv";
+
+const LEARNING_RATE: f64 = 0.001;
+const NUM_EPOCHS: usize = 20;
 
 // Run with `cargo run --release` to get reasonable performance
+// Use `export RUST_LOG=info` environment variable to get progress information
 fn main() -> Result<()> {
-    let data = load_vectors(INPUT_PATH)?;
-    let labels = load_labels(LABELS_PATH)?;
+    let train_data = load_vectors(TRAIN_VECTORS_PATH)?;
+    let train_labels = load_labels(TRAIN_LABELS_PATH)?;
+
+    let test_data = load_vectors(TEST_VECTORS_PATH)?;
+    let test_labels = load_labels(TEST_LABELS_PATH)?;
 
     let mut network = Model::default()
         .with_layer(784, Activator::Identity)
@@ -27,49 +33,36 @@ fn main() -> Result<()> {
         .with_layer(10, Activator::Softmax)
         .with_learning_rate(LEARNING_RATE);
 
-    // Very dumb training loop, record by record
-    // TODO: shuffle the data and use batches
-    for it in 0..EPOCHS * NUM_TRAINING_EXAMPLES {
-        let k = rand::random::<usize>() % data.len();
+    let t0 = std::time::Instant::now();
 
-        network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
-
-        // Show accuracy on 1000 random examples (should be separated from training data in the future)
-        if it % 10_000 == 9_999 {
-            let mut correct = 0;
-            for _ in 0..1000 {
-                let k = rand::random::<usize>() % data.len();
-
-                // Add breakpoint here and see prediction
-                // It seems that we will need to use softmax and cross-entropy
-                let prediction = network.predict(&data[k]);
-
-                if one_hot_to_label(prediction) == labels[k] {
-                    correct += 1;
-                }
-            }
-
-            println!(
-                "Epoch: {}, accuracy: {:.2}%",
-                it / NUM_TRAINING_EXAMPLES,
-                correct as f64 / 10.
-            );
+    for epoch in 0..NUM_EPOCHS {
+        for k in 0..train_data.len() {
+            network.train_on_single(&train_data[k], &label_to_one_hot(train_labels[k]));
         }
+
+        let elapsed = humantime::format_duration(std::time::Duration::from_secs(t0.elapsed().as_secs()));
+        let acurracy = test_data_accuracy(&mut network, &test_data, &test_labels);
+
+        println!(
+            "Epoch: {}  🎯 Accuracy: {:.2}%  ⏳ Time elapsed: {}",
+            epoch, acurracy, elapsed
+        );
     }
-
-    // Check accuracy on the whole dataset
-    let mut correct = 0;
-    for k in 0..data.len() {
-        let prediction = network.predict(&data[k]);
-
-        if one_hot_to_label(prediction) == labels[k] {
-            correct += 1;
-        }
-    }
-
-    println!("Final accuracy: {:.2}%", correct as f64 / data.len() as f64 * 100.0);
 
     Ok(())
+}
+
+fn test_data_accuracy(network: &mut Model, test_data: &[Vec<f64>], test_labels: &[usize]) -> f64 {
+    let correct = test_data
+        .iter()
+        .zip(test_labels)
+        .filter(|(data, label)| {
+            let prediction = network.predict(data);
+            one_hot_to_label(prediction) == **label
+        })
+        .count();
+
+    correct as f64 / test_data.len() as f64 * 100.0
 }
 
 fn label_to_one_hot(label: usize) -> Vec<f64> {
