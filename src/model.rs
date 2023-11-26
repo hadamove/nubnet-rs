@@ -63,53 +63,55 @@ impl Model {
         // Copy input to the first layer
         self.layers[0].activation[1..].copy_from_slice(input);
 
-        // Calculate potentials and activations for each layer
-        for l in 1..self.layers.len() {
-            for i in 1..self.layers[l].size {
-                let weighted_sum = (0..self.layers[l - 1].size)
-                    .map(|k| self.layers[l].inbound_weights[i][k] * self.layers[l - 1].activation[k])
-                    .sum::<f64>();
+        self.layers.iter_mut().reduce(|prev_layer, layer| {
+            layer.potential[1..].iter_mut().zip(1..).for_each(|(potential, i)| {
+                *potential = (0..prev_layer.size)
+                    .map(|j| layer.inbound_weights[i][j] * prev_layer.activation[j])
+                    .sum();
+            });
 
-                self.layers[l].potential[i] = weighted_sum;
-                self.layers[l].activation[i] = self.layers[l].activator.function(weighted_sum);
-            }
-        }
+            // TODO: rewrite this to a single call
+            layer.activation[1..].iter_mut().zip(1..).for_each(|(activation, i)| {
+                *activation = layer.activator.function(layer.potential[i]);
+            });
+            layer
+        });
 
-        // Apply transform to the output layer
+        // TODO: rewrite this into the loop (custom activation for output)
         let output_layer = self.layers.len() - 1;
         self.output_transform
             .apply(&mut self.layers[output_layer].activation[1..]);
     }
 
     fn feed_backward(&mut self, desired: &[f64]) {
-        let output = self.layers.last_mut().expect("No layers in the model");
-        // For output layer, delta is the difference between desired output and actual output multiplied by the derivative of the activation function
-        // The first delta is for the bias neuron so we skip it
-        for i in 1..output.size {
-            output.delta[i] = (desired[i - 1] - output.activation[i]) * output.activator.prime(output.potential[i]);
+        let output_layer = self.layers.last_mut().expect("No layers in the model");
+        for i in 1..output_layer.size {
+            output_layer.delta[i] = desired[i - 1] - output_layer.activation[i];
         }
 
-        for l in (1..self.layers.len() - 1).rev() {
-            for i in 0..self.layers[l].size {
-                // For hidden layers, delta is the weighted sum of deltas from the layer above
-                let weighted_sum: f64 = (0..self.layers[l + 1].size)
-                    .map(|k| self.layers[l + 1].delta[k] * self.layers[l + 1].inbound_weights[k][i])
-                    .sum();
+        self.layers[1..].iter_mut().rev().reduce(|layer_above, layer| {
+            layer.delta.iter_mut().zip(0..).for_each(|(delta, i)| {
+                *delta = layer.activator.prime(layer.potential[i])
+                    * (0..layer_above.size)
+                        .map(|j| layer_above.delta[j] * layer_above.inbound_weights[j][i])
+                        .sum::<f64>();
+            });
 
-                self.layers[l].delta[i] = self.layers[l].activator.prime(self.layers[l].potential[i]) * weighted_sum;
-            }
-        }
+            layer
+        });
     }
 
     fn update_weights(&mut self) {
-        for l in 1..self.layers.len() {
-            for i in 0..self.layers[l].size {
-                for j in 0..self.layers[l].inbound_weights[i].len() {
-                    self.layers[l].inbound_weights[i][j] +=
-                        self.learning_rate * self.layers[l].delta[i] * self.layers[l - 1].activation[j]
-                }
-            }
-        }
+        self.layers.iter_mut().reduce(|prev_layer, layer| {
+            layer.inbound_weights.iter_mut().zip(0..).for_each(|(weights, i)| {
+                weights
+                    .iter_mut()
+                    .zip(0..prev_layer.size)
+                    .for_each(|(weight, j)| *weight += self.learning_rate * layer.delta[i] * prev_layer.activation[j]);
+            });
+
+            layer
+        });
     }
 
     fn get_output(&self) -> &[f64] {
