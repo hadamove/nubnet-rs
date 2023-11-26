@@ -51,10 +51,10 @@ impl Model {
     fn feed_forward(&mut self, input: &[f64]) {
         self.layers[0].activation[1..].copy_from_slice(input);
 
-        self.layers.iter_mut().reduce(|prev_layer, layer| {
+        self.layers.iter_mut().reduce(|layer_below, layer| {
             layer.potential[1..].iter_mut().zip(1..).for_each(|(potential, i)| {
-                *potential = (0..prev_layer.size)
-                    .map(|j| layer.inbound_weights[i][j] * prev_layer.activation[j])
+                *potential = (0..layer_below.size)
+                    .map(|j| layer.inbound_weights[i][j] * layer_below.activation[j])
                     .sum();
             });
 
@@ -85,12 +85,12 @@ impl Model {
     }
 
     fn update_weights(&mut self) {
-        self.layers.iter_mut().reduce(|prev_layer, layer| {
+        self.layers.iter_mut().reduce(|layer_below, layer| {
             layer.inbound_weights.iter_mut().zip(0..).for_each(|(weights, i)| {
                 weights
                     .iter_mut()
-                    .zip(0..prev_layer.size)
-                    .for_each(|(weight, j)| *weight += self.learning_rate * layer.delta[i] * prev_layer.activation[j]);
+                    .zip(0..layer_below.size)
+                    .for_each(|(weight, j)| *weight += self.learning_rate * layer.delta[i] * layer_below.activation[j]);
             });
 
             layer
