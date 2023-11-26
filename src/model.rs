@@ -29,7 +29,7 @@ impl Model {
         self
     }
 
-    /// Trains the model on a single example. Internally, it performs forward pass, backward pass and weight update.
+    /// Trains the model on a single example. Internally, it performs forward pass, backward pass and weights update.
     /// The input and desired slices must be of the same size as the first and last layers, respectively.
     pub fn train_on_single(&mut self, input: &[f64], desired: &[f64]) {
         assert_eq!(input.len(), self.layers[0].size - 1);
@@ -105,10 +105,6 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::{Activator, Model};
-    use rand::{distributions::Uniform, Rng};
-
-    // The training is not deterministic, so we need to allow some error
-    const MAX_ERR: f64 = 0.1;
 
     #[test]
     fn test_xor() {
@@ -125,18 +121,14 @@ mod tests {
             (&[1., 1.], &[0.]),
         ];
 
-        let mut thread_rng = rand::thread_rng();
-
-        for _ in 0..10_000 {
-            let k = thread_rng.sample(Uniform::new(0, data.len()));
-            let (input, desired) = data[k];
-
+        for i in 0..10_000 {
+            let (input, desired) = data[i % data.len()];
             network.train_on_single(input, desired);
         }
 
-        for (input, desired) in data {
+        for (input, [desired]) in data {
             let result = network.predict(input)[0];
-            assert!(f64::abs(result - desired[0]) < MAX_ERR);
+            assert!(f64::abs(result - desired) < 0.1);
         }
     }
 }
