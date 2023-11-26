@@ -1,4 +1,4 @@
-put your UČOs (and names) on this line (no exact format required)
+ 485378 Peter Jaško, 492982 Hugo Adamove
 ## PV021 project -- Deep Learning from Scratch
 
 ### DEADLINE
