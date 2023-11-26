@@ -1,9 +1,7 @@
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-};
-
 use anyhow::Result;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Write};
+
 use pv021_project::{activators::Activator, model::Model};
 
 const NUM_CLASSES: usize = 10;
@@ -14,11 +12,13 @@ const TEST_LABELS_PATH: &str = "data/fashion_mnist_test_labels.csv";
 const TRAIN_VECTORS_PATH: &str = "data/fashion_mnist_train_vectors.csv";
 const TRAIN_LABELS_PATH: &str = "data/fashion_mnist_train_labels.csv";
 
+const TRAIN_PREDICTIONS_PATH: &str = "train_predictions.csv";
+const TEST_PREDICTIONS_PATH: &str = "test_predictions.csv";
+
 const LEARNING_RATE: f64 = 0.001;
 const NUM_EPOCHS: usize = 20;
 
 // Run with `cargo run --release` to get reasonable performance
-// Use `export RUST_LOG=info` environment variable to get progress information
 fn main() -> Result<()> {
     let train_data = load_vectors(TRAIN_VECTORS_PATH)?;
     let train_labels = load_labels(TRAIN_LABELS_PATH)?;
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     let test_data = load_vectors(TEST_VECTORS_PATH)?;
     let test_labels = load_labels(TEST_LABELS_PATH)?;
 
-    let mut network = Model::default()
+    let mut model = Model::default()
         .with_layer(784, Activator::Identity)
         .with_layer(128, Activator::Tanh)
         .with_layer(64, Activator::Tanh)
@@ -36,48 +36,27 @@ fn main() -> Result<()> {
     let t0 = std::time::Instant::now();
 
     for epoch in 0..NUM_EPOCHS {
-        for k in 0..train_data.len() {
-            network.train_on_single(&train_data[k], &label_to_one_hot(train_labels[k]));
+        for (input, label) in train_data.iter().zip(&train_labels) {
+            model.train_on_single(input, &label_to_one_hot(*label));
         }
 
-        let elapsed = humantime::format_duration(std::time::Duration::from_secs(t0.elapsed().as_secs()));
-        let acurracy = test_data_accuracy(&mut network, &test_data, &test_labels);
+        // TODO: Remove this scope before submitting (>Any implementation that uses testing input vectors for anything else than final evaluation will result in failure)
+        // TODO: Also remove `humantime` dependency and `calculate_accuracy` function
+        {
+            let elapsed = humantime::format_duration(std::time::Duration::from_secs(t0.elapsed().as_secs()));
+            let acurracy = calculate_accuracy(&mut model, &test_data, &test_labels);
 
-        println!(
-            "Epoch: {}  🎯 Accuracy: {:.2}%  ⏳ Time elapsed: {}",
-            epoch, acurracy, elapsed
-        );
+            println!(
+                "Epoch: {}  🎯 Accuracy: {:.2}%  ⏳ Time elapsed: {}",
+                epoch, acurracy, elapsed
+            );
+        }
     }
 
+    export_predictions(&mut model, &train_data, TRAIN_PREDICTIONS_PATH)?;
+    export_predictions(&mut model, &test_data, TEST_PREDICTIONS_PATH)?;
+
     Ok(())
-}
-
-fn test_data_accuracy(network: &mut Model, test_data: &[Vec<f64>], test_labels: &[usize]) -> f64 {
-    let correct = test_data
-        .iter()
-        .zip(test_labels)
-        .filter(|(data, label)| {
-            let prediction = network.predict(data);
-            one_hot_to_label(prediction) == **label
-        })
-        .count();
-
-    correct as f64 / test_data.len() as f64 * 100.0
-}
-
-fn label_to_one_hot(label: usize) -> Vec<f64> {
-    let mut one_hot = vec![0.0; NUM_CLASSES];
-    one_hot[label] = 1.0;
-    one_hot
-}
-
-fn one_hot_to_label(one_hot: &[f64]) -> usize {
-    one_hot
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        .unwrap()
-        .0
 }
 
 fn load_vectors(filename: &str) -> Result<Vec<Vec<f64>>> {
@@ -109,4 +88,44 @@ fn load_labels(filename: &str) -> Result<Vec<usize>> {
         .collect();
 
     labels
+}
+
+fn export_predictions(model: &mut Model, data: &[Vec<f64>], filename: &str) -> Result<()> {
+    let mut file = File::create(filename)?;
+
+    for input in data {
+        let prediction = model.predict(input);
+        let label = one_hot_to_label(prediction);
+        writeln!(file, "{}", label)?;
+    }
+
+    Ok(())
+}
+
+fn calculate_accuracy(model: &mut Model, data: &[Vec<f64>], labels: &[usize]) -> f64 {
+    let correct = data
+        .iter()
+        .zip(labels)
+        .filter(|(data, label)| {
+            let prediction = model.predict(data);
+            one_hot_to_label(prediction) == **label
+        })
+        .count();
+
+    correct as f64 / data.len() as f64 * 100.0
+}
+
+fn label_to_one_hot(label: usize) -> Vec<f64> {
+    let mut one_hot = vec![0.0; NUM_CLASSES];
+    one_hot[label] = 1.0;
+    one_hot
+}
+
+fn one_hot_to_label(one_hot: &[f64]) -> usize {
+    one_hot
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.total_cmp(b))
+        .unwrap()
+        .0
 }
