@@ -1,9 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use pv021_project::{
-    activators::{Activator, OutputTransform},
-    model::Model,
-};
+use pv021_project::{activators::Activator, model::Model};
 
 const NUM_CLASSES: usize = 10;
 const NUM_TRAINING_EXAMPLES: usize = 10_000;
@@ -42,18 +39,13 @@ fn main() -> Result<()> {
         .with_layer(784, Activator::Identity)
         .with_layer(128, Activator::Tanh)
         .with_layer(64, Activator::Tanh)
-        .with_layer(10, Activator::Identity)
-        .with_transform(OutputTransform::Softmax)
+        .with_layer(10, Activator::Softmax)
         .with_learning_rate(args.learning_rate);
 
     // Very dumb training loop, record by record
     // TODO: shuffle the data and use batches
     for it in 0..args.epochs * NUM_TRAINING_EXAMPLES {
         let k = rand::random::<usize>() % data.len();
-
-        network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
-
-        network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
 
         network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
 
