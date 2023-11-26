@@ -1,50 +1,35 @@
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
+
 use anyhow::Result;
-use clap::Parser;
 use pv021_project::{activators::Activator, model::Model};
 
 const NUM_CLASSES: usize = 10;
 const NUM_TRAINING_EXAMPLES: usize = 10_000;
 
-#[derive(Parser)]
-struct CliArguments {
-    #[arg(short, long, default_value = "data/fashion_mnist_test_vectors.csv")]
-    input_path: String,
+const INPUT_PATH: &str = "data/fashion_mnist_test_vectors.csv";
+const LABELS_PATH: &str = "data/fashion_mnist_test_labels.csv";
 
-    #[arg(short, long, default_value = "data/fashion_mnist_test_labels.csv")]
-    labels_path: String,
-
-    #[arg(short = 'r', long, default_value_t = 0.01)]
-    learning_rate: f64,
-
-    #[arg(short, long, default_value_t = 30)]
-    epochs: usize,
-}
+const LEARNING_RATE: f64 = 0.01;
+const EPOCHS: usize = 30;
 
 // Run with `cargo run --release` to get reasonable performance
 fn main() -> Result<()> {
-    let args = CliArguments::parse();
-
-    let data = load_csv_data(&args.input_path)?;
-
-    // Transform data from 0..255 to 0..1
-    // TODO: Refactor this
-    let data: Vec<Vec<_>> = data
-        .into_iter()
-        .map(|row| row.into_iter().map(|x| x / 255.0).collect())
-        .collect();
-
-    let labels = load_csv_labels(&args.labels_path)?;
+    let data = load_vectors(INPUT_PATH)?;
+    let labels = load_labels(LABELS_PATH)?;
 
     let mut network = Model::default()
         .with_layer(784, Activator::Identity)
         .with_layer(128, Activator::Tanh)
         .with_layer(64, Activator::Tanh)
         .with_layer(10, Activator::Softmax)
-        .with_learning_rate(args.learning_rate);
+        .with_learning_rate(LEARNING_RATE);
 
     // Very dumb training loop, record by record
     // TODO: shuffle the data and use batches
-    for it in 0..args.epochs * NUM_TRAINING_EXAMPLES {
+    for it in 0..EPOCHS * NUM_TRAINING_EXAMPLES {
         let k = rand::random::<usize>() % data.len();
 
         network.train_on_single(&data[k], &label_to_one_hot(labels[k]));
@@ -102,25 +87,33 @@ fn one_hot_to_label(one_hot: &[f64]) -> usize {
         .0
 }
 
-fn load_csv_data(filename: &str) -> Result<Vec<Vec<f64>>> {
-    let mut reader = csv::ReaderBuilder::new().has_headers(false).from_path(filename)?;
+fn load_vectors(filename: &str) -> Result<Vec<Vec<f64>>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
 
-    let data = reader
-        .records()
-        .map(|record| {
-            record?
-                .iter()
-                .map(|field| field.parse::<f64>().map_err(|e| e.into()))
+    let vectors: Result<Vec<Vec<f64>>> = reader
+        .lines()
+        .map_while(Result::ok)
+        .map(|line| {
+            line.split(',')
+                .map(|value| value.parse::<f64>().map_err(Into::into))
+                .map(|value| value.map(|value| value / 255.0))
                 .collect()
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect();
 
-    Ok(data)
+    vectors
 }
 
-fn load_csv_labels(filename: &str) -> Result<Vec<usize>> {
-    let data = load_csv_data(filename)?;
+fn load_labels(filename: &str) -> Result<Vec<usize>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
 
-    // Each row should contain a single value
-    Ok(data.into_iter().flatten().map(|x| x as usize).collect())
+    let labels: Result<Vec<usize>> = reader
+        .lines()
+        .map_while(Result::ok)
+        .map(|line| line.parse::<usize>().map_err(Into::into))
+        .collect();
+
+    labels
 }
