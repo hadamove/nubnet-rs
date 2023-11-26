@@ -1,12 +1,8 @@
-use crate::{
-    activators::{Activator, OutputTransform},
-    layer::Layer,
-};
+use crate::{activators::Activator, layer::Layer};
 
 pub struct Model {
     layers: Vec<Layer>,
     learning_rate: f64,
-    output_transform: OutputTransform,
 }
 
 impl Default for Model {
@@ -14,7 +10,6 @@ impl Default for Model {
         Self {
             layers: vec![],
             learning_rate: 0.1,
-            output_transform: OutputTransform::Identity,
         }
     }
 }
@@ -31,12 +26,6 @@ impl Model {
     /// Sets the learning rate for the model. Default is 0.1.
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.learning_rate = learning_rate;
-        self
-    }
-
-    /// Sets the output transform for the model. Default is identity.
-    pub fn with_transform(mut self, transformer: OutputTransform) -> Self {
-        self.output_transform = transformer;
         self
     }
 
@@ -70,17 +59,11 @@ impl Model {
                     .sum();
             });
 
-            // TODO: rewrite this to a single call
-            layer.activation[1..].iter_mut().zip(1..).for_each(|(activation, i)| {
-                *activation = layer.activator.function(layer.potential[i]);
-            });
+            layer.activation[1..].copy_from_slice(&layer.potential[1..]);
+            layer.activator.apply(&mut layer.activation[1..]);
+
             layer
         });
-
-        // TODO: rewrite this into the loop (custom activation for output)
-        let output_layer = self.layers.len() - 1;
-        self.output_transform
-            .apply(&mut self.layers[output_layer].activation[1..]);
     }
 
     fn feed_backward(&mut self, desired: &[f64]) {
@@ -90,8 +73,9 @@ impl Model {
         }
 
         self.layers[1..].iter_mut().rev().reduce(|layer_above, layer| {
+            layer.activator.apply_prime(&mut layer.potential);
             layer.delta.iter_mut().zip(0..).for_each(|(delta, i)| {
-                *delta = layer.activator.prime(layer.potential[i])
+                *delta = layer.potential[i]
                     * (0..layer_above.size)
                         .map(|j| layer_above.delta[j] * layer_above.inbound_weights[j][i])
                         .sum::<f64>();
