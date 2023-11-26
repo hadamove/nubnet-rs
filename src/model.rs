@@ -67,7 +67,7 @@ impl Model {
         for l in 1..self.layers.len() {
             for i in 1..self.layers[l].size {
                 let weighted_sum = (0..self.layers[l - 1].size)
-                    .map(|k| self.layers[l].input_weights[i][k] * self.layers[l - 1].activation[k])
+                    .map(|k| self.layers[l].inbound_weights[i][k] * self.layers[l - 1].activation[k])
                     .sum::<f64>();
 
                 self.layers[l].potential[i] = weighted_sum;
@@ -93,7 +93,7 @@ impl Model {
             for i in 0..self.layers[l].size {
                 // For hidden layers, delta is the weighted sum of deltas from the layer above
                 let weighted_sum: f64 = (0..self.layers[l + 1].size)
-                    .map(|k| self.layers[l + 1].delta[k] * self.layers[l + 1].input_weights[k][i])
+                    .map(|k| self.layers[l + 1].delta[k] * self.layers[l + 1].inbound_weights[k][i])
                     .sum();
 
                 self.layers[l].delta[i] = self.layers[l].activator.prime(self.layers[l].potential[i]) * weighted_sum;
@@ -104,8 +104,8 @@ impl Model {
     fn update_weights(&mut self) {
         for l in 1..self.layers.len() {
             for i in 0..self.layers[l].size {
-                for j in 0..self.layers[l].input_weights[i].len() {
-                    self.layers[l].input_weights[i][j] +=
+                for j in 0..self.layers[l].inbound_weights[i].len() {
+                    self.layers[l].inbound_weights[i][j] +=
                         self.learning_rate * self.layers[l].delta[i] * self.layers[l - 1].activation[j]
                 }
             }
@@ -132,7 +132,7 @@ mod tests {
             .with_layer(2, Activator::Identity)
             .with_layer(2, Activator::Tanh)
             .with_layer(1, Activator::Identity)
-            .with_learning_rate(0.1);
+            .with_learning_rate(0.03);
 
         let data = [
             (&[0., 0.], &[0.]),
