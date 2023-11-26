@@ -49,7 +49,6 @@ impl Model {
     }
 
     fn feed_forward(&mut self, input: &[f64]) {
-        // Copy input to the first layer
         self.layers[0].activation[1..].copy_from_slice(input);
 
         self.layers.iter_mut().reduce(|prev_layer, layer| {
@@ -106,7 +105,6 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::{Activator, Model};
-    use more_asserts::*;
     use rand::{distributions::Uniform, Rng};
 
     // The training is not deterministic, so we need to allow some error
@@ -138,7 +136,7 @@ mod tests {
 
         for (input, desired) in data {
             let result = network.predict(input)[0];
-            assert_le!(f64::abs(result - desired[0]), MAX_ERR);
+            assert!(f64::abs(result - desired[0]) < MAX_ERR);
         }
     }
 }
