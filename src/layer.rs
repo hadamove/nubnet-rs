@@ -6,7 +6,7 @@ pub(crate) struct Layer {
     pub(crate) potential: Vec<f64>,
     pub(crate) activation: Vec<f64>,
     pub(crate) delta: Vec<f64>,
-    pub(crate) input_weights: Vec<Vec<f64>>,
+    pub(crate) inbound_weights: Vec<Vec<f64>>,
     pub(crate) activator: Activator,
 }
 
@@ -29,7 +29,7 @@ impl Layer {
             potential: vec![1.0; size_with_bias],
             activation: vec![1.0; size_with_bias],
             delta: vec![0.0; size_with_bias],
-            input_weights,
+            inbound_weights: input_weights,
             activator,
         }
     }
