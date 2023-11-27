@@ -3,3 +3,6 @@ data/
 # Added by cargo
 
 /target
+
+# Predictions
+*.csv
