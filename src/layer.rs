@@ -1,12 +1,15 @@
+use std::sync::{Arc, RwLock};
+
 use crate::activators::Activator;
 use rand::Rng;
 
+#[derive(Clone)]
 pub struct Layer {
     pub size: usize,
     pub potential: Vec<f64>,
     pub activation: Vec<f64>,
     pub delta: Vec<f64>,
-    pub inbound_weights: Vec<Vec<f64>>,
+    pub inbound_weights: Arc<RwLock<Vec<Vec<f64>>>>,
     pub activator: Activator,
 }
 
@@ -28,7 +31,7 @@ impl Layer {
             potential: vec![1.0; size_with_bias],
             activation: vec![1.0; size_with_bias],
             delta: vec![0.0; size_with_bias],
-            inbound_weights,
+            inbound_weights: Arc::new(RwLock::new(inbound_weights)),
             activator,
         }
     }
