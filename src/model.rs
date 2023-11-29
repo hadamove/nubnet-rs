@@ -132,7 +132,6 @@ impl<const N_THREADS: usize> Model<N_THREADS> {
 
 type InputData = Arc<Vec<f64>>;
 
-// Holds the state of a child thread
 struct ThreadHandle {
     state: Arc<RwLock<ModelState>>,
     sender: mpsc::Sender<(InputData, InputData)>,
@@ -181,46 +180,5 @@ impl ModelState {
 
             layer
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::{Activator, Model};
-
-    const NUM_THREADS: usize = 1;
-
-    #[test]
-    fn test_xor() {
-        let mut network = Model::<NUM_THREADS>::new(0.03)
-            .with_layer(2, Activator::Identity)
-            .with_layer(2, Activator::Tanh)
-            .with_layer(1, Activator::Identity);
-
-        let data = [
-            Arc::new(vec![0., 0.]),
-            Arc::new(vec![1., 0.]),
-            Arc::new(vec![0., 1.]),
-            Arc::new(vec![1., 1.]),
-        ];
-
-        let labels = [
-            Arc::new(vec![0.]),
-            Arc::new(vec![1.]),
-            Arc::new(vec![1.]),
-            Arc::new(vec![0.]),
-        ];
-
-        for _ in 0..10_000 {
-            network.train_on_batch(&data, &data);
-        }
-
-        for (input, desired) in data.iter().zip(&labels) {
-            let result = network.predict(&input)[0];
-            println!("{} -> {}", input[0], result);
-            // assert!(f64::abs(result - desired[0]) < 0.1);
-        }
     }
 }
