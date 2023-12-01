@@ -1,7 +1,6 @@
 #!/bin/bash
 
-module add rustup-1.24.3
-rustup default 1.74.0
+module add rust-1.74.0
 
 echo "#################"
 echo "    COMPILING    "
