@@ -32,7 +32,6 @@ fn main() -> Result<()> {
 
     let mut model = Model::new(NUM_THREADS)
         .with_layer(784, Activator::Identity)
-        .with_layer(128, Activator::Tanh)
         .with_layer(64, Activator::Tanh)
         .with_layer(10, Activator::Softmax);
 
