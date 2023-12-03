@@ -15,14 +15,12 @@ pub struct Model {
 }
 
 impl Model {
-    /// Initializes the model with `num_threads` child threads, the model has no layers yet. Call `with_layer` to add layers.
-    pub fn new(num_threads: usize) -> Self {
-        // Create a barrier synchronizes `num_threads` child threads and the main thread
-        // The FW and BW pass is done in the child threads, the weight update is done in the main thread
-        let barrier = Arc::new(Barrier::new(num_threads + 1));
+    /// Initializes the model with `batch_size` child threads, the model has no layers yet. Call `with_layer` to add layers.
+    pub fn new(batch_size: usize) -> Self {
+        let barrier = Arc::new(Barrier::new(batch_size + 1));
 
-        // Spawn N_THREADS threads for computing the FW and BW pass
-        let threads = (0..num_threads)
+        // Spawn one thread for each input in the batch that will compute the forward and backward pass
+        let threads = (0..batch_size)
             .map(|_| {
                 let barrier = barrier.clone();
                 // Create a channel for sending inputs and labels from the main thread to the child threads
@@ -66,7 +64,7 @@ impl Model {
 
     /// Trains the model on the given inputs and labels. The slices must be of the same size as the first layer.
     pub fn train_on_batch(&mut self, inputs: &[InputData], labels: &[InputData], learning_rate: f64) {
-        // Send inputs and labels to all threads
+        // Send inputs and labels to child threads
         for ((input, desired), thread) in inputs.iter().zip(labels).zip(&self.threads) {
             thread.sender.send((input.clone(), desired.clone())).unwrap();
         }
@@ -74,7 +72,6 @@ impl Model {
         // Wait for all child threads to finish forward and backward pass
         self.barrier.wait();
 
-        // Update weights
         self.update_weights(learning_rate);
     }
 
@@ -95,7 +92,7 @@ impl Model {
         loop {
             // receiver.recv() blocks this thread until main thread feeds us more data
             let Ok((input, desired)) = receiver.recv() else {
-                // The main thread has dropped the sender, so we can exit
+                // The main thread has dropped the sender (Model struct has been dropped), so we can exit the thread
                 break;
             };
 
