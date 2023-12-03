@@ -21,7 +21,7 @@ impl Layer {
         let inbound_weights: Vec<Vec<f64>> = (0..size_with_bias)
             .map(|_| {
                 (0..input_size)
-                    .map(|_| thread_rng.gen::<f64>() / input_size as f64)
+                    .map(|_| (2.0 * thread_rng.gen::<f64>() - 1.0) / input_size as f64)
                     .collect()
             })
             .collect();
