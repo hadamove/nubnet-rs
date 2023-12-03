@@ -38,8 +38,11 @@ fn main() -> Result<()> {
 
     let t0 = std::time::Instant::now();
 
-    println!("Training...");
-    for _ in 0..NUM_EPOCHS {
+    for epoch in 0..NUM_EPOCHS {
+        // Shuffle the data at the beginning of each epoch
+        let (train_data, train_labels) = shuffle_data(&train_data, &train_labels);
+
+        // Slice the data into batches, the batch size is equal to the number of threads (each thread gets one input)
         for batch_start in (0..train_data.len()).step_by(NUM_THREADS) {
             let batch_end = usize::min(batch_start + NUM_THREADS, train_data.len());
             let batch_start = batch_end - NUM_THREADS;
@@ -93,7 +96,17 @@ fn load_labels(filename: &str) -> Result<Vec<Arc<Vec<f64>>>> {
     labels.map(|v| v.into_iter().map(label_to_one_hot).map(Arc::new).collect::<Vec<_>>())
 }
 
-fn export_predictions(model: &mut Model<NUM_THREADS>, data: &[Arc<Vec<f64>>], filename: &str) -> Result<()> {
+fn shuffle_data(data: &[InputData], labels: &[InputData]) -> (Vec<InputData>, Vec<InputData>) {
+    let mut order = (0..data.len()).collect::<Vec<_>>();
+    order.shuffle(&mut rand::thread_rng());
+
+    // Clone here is cheap because we only copy the Arc pointers to the vectors, not the vectors themselves
+    let shuffle_vec = |v: &[InputData]| order.iter().map(|&i| v[i].clone()).collect::<Vec<_>>();
+
+    (shuffle_vec(data), shuffle_vec(labels))
+}
+
+fn export_predictions(model: &mut Model, data: &[InputData], filename: &str) -> Result<()> {
     let mut file = File::create(filename)?;
 
     for input in data {
