@@ -8,7 +8,7 @@ use pv021_project::activators::Activator;
 use pv021_project::model::{InputData, Model};
 
 // Hyperparameters
-const NUM_THREADS: usize = 32;
+const BATCH_SIZE: usize = 32;
 const NUM_EPOCHS: usize = 30;
 const LEARNING_RATE: f64 = 0.001;
 const LEARNING_RATE_DECAY: f64 = 0.003;
@@ -30,9 +30,9 @@ fn main() -> Result<()> {
 
     let test_data = load_vectors(TEST_VECTORS_PATH)?;
 
-    let mut model = Model::new(NUM_THREADS)
+    let mut model = Model::new(BATCH_SIZE)
         .with_layer(784, Activator::Identity)
-        .with_layer(64, Activator::Tanh)
+        .with_layer(96, Activator::Tanh)
         .with_layer(10, Activator::Softmax);
 
     let t0 = std::time::Instant::now();
@@ -45,9 +45,9 @@ fn main() -> Result<()> {
         let (train_data, train_labels) = shuffle_data(&train_data, &train_labels);
 
         // Slice the data into batches, the batch size is equal to the number of threads (each thread gets one input)
-        for batch_start in (0..train_data.len()).step_by(NUM_THREADS) {
-            let batch_end = usize::min(batch_start + NUM_THREADS, train_data.len());
-            let batch_start = batch_end - NUM_THREADS;
+        for batch_start in (0..train_data.len()).step_by(BATCH_SIZE) {
+            let batch_end = usize::min(batch_start + BATCH_SIZE, train_data.len());
+            let batch_start = batch_end - BATCH_SIZE;
 
             let inputs = &train_data[batch_start..batch_end];
             let labels = &train_labels[batch_start..batch_end];
