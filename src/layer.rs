@@ -1,7 +1,7 @@
+use rand::Rng;
 use std::sync::{Arc, RwLock};
 
 use crate::activators::Activator;
-use rand::Rng;
 
 #[derive(Clone)]
 pub struct Layer {

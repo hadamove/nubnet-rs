@@ -1,23 +1,23 @@
 use anyhow::Result;
+use rand::seq::SliceRandom;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Arc;
 
-use pv021_project::{activators::Activator, model::Model};
+use pv021_project::activators::Activator;
+use pv021_project::model::{InputData, Model};
 
 // Hyperparameters
 const NUM_THREADS: usize = 32;
-const LEARNING_RATE: f64 = 0.001;
 const NUM_EPOCHS: usize = 30;
+const LEARNING_RATE: f64 = 0.001;
+const LEARNING_RATE_DECAY: f64 = 0.003;
 
 // Constants
 const NUM_CLASSES: usize = 10;
-
 const TRAIN_VECTORS_PATH: &str = "data/fashion_mnist_train_vectors.csv";
 const TRAIN_LABELS_PATH: &str = "data/fashion_mnist_train_labels.csv";
-
 const TEST_VECTORS_PATH: &str = "data/fashion_mnist_test_vectors.csv";
-
 const TRAIN_PREDICTIONS_PATH: &str = "train_predictions.csv";
 const TEST_PREDICTIONS_PATH: &str = "test_predictions.csv";
 
@@ -30,13 +30,16 @@ fn main() -> Result<()> {
 
     let test_data = load_vectors(TEST_VECTORS_PATH)?;
 
-    let mut model = Model::<NUM_THREADS>::new(LEARNING_RATE)
+    let mut model = Model::new(NUM_THREADS)
         .with_layer(784, Activator::Identity)
         .with_layer(128, Activator::Tanh)
         .with_layer(64, Activator::Tanh)
         .with_layer(10, Activator::Softmax);
 
     let t0 = std::time::Instant::now();
+    let mut learning_rate = LEARNING_RATE;
+
+    print!("Training... ");
 
     for epoch in 0..NUM_EPOCHS {
         // Shuffle the data at the beginning of each epoch
@@ -50,20 +53,23 @@ fn main() -> Result<()> {
             let inputs = &train_data[batch_start..batch_end];
             let labels = &train_labels[batch_start..batch_end];
 
-            model.train_on_batch(inputs, labels);
+            model.train_on_batch(inputs, labels, learning_rate);
         }
+
+        // Apply decay to the learning rate
+        learning_rate *= 1.0 / (1.0 + epoch as f64 * LEARNING_RATE_DECAY);
     }
 
-    println!("Training took {} seconds", t0.elapsed().as_secs());
+    println!("Done (in {} seconds).", t0.elapsed().as_secs());
+    println!("Exporting predictions...");
 
-    println!("Predicting...");
     export_predictions(&mut model, &train_data, TRAIN_PREDICTIONS_PATH)?;
     export_predictions(&mut model, &test_data, TEST_PREDICTIONS_PATH)?;
 
     Ok(())
 }
 
-fn load_vectors(filename: &str) -> Result<Vec<Arc<Vec<f64>>>> {
+fn load_vectors(filename: &str) -> Result<Vec<InputData>> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
 
@@ -82,7 +88,7 @@ fn load_vectors(filename: &str) -> Result<Vec<Arc<Vec<f64>>>> {
     vectors.map(|v| v.into_iter().map(Arc::new).collect::<Vec<_>>())
 }
 
-fn load_labels(filename: &str) -> Result<Vec<Arc<Vec<f64>>>> {
+fn load_labels(filename: &str) -> Result<Vec<InputData>> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
 

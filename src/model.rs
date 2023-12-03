@@ -2,22 +2,27 @@ use std::sync::{mpsc, Arc, Barrier, RwLock};
 
 use crate::{activators::Activator, layer::Layer};
 
-pub struct Model<const N_THREADS: usize> {
+// The inputs have to be `Arc<Vec<f64>>` so that they can be sent to the child threads safely and without cloning.
+pub type InputData = Arc<Vec<f64>>;
+
+pub struct Model {
+    // The state of the model on the main thread
     state: ModelState,
+    // A barrier for synchronizing the main thread and the child threads
     barrier: Arc<Barrier>,
+    // The handles to the child threads, each thread computes the FW and BW pass for one input
     threads: Vec<ThreadHandle>,
-    learning_rate: f64,
 }
 
-impl<const N_THREADS: usize> Model<N_THREADS> {
-    /// Initializes the model with `N_THREADS` child threads and a learning rate.
-    pub fn new(learning_rate: f64) -> Self {
-        // Create a barrier synchronizes N_THREADS child threads and the main thread
+impl Model {
+    /// Initializes the model with `num_threads` child threads, the model has no layers yet. Call `with_layer` to add layers.
+    pub fn new(num_threads: usize) -> Self {
+        // Create a barrier synchronizes `num_threads` child threads and the main thread
         // The FW and BW pass is done in the child threads, the weight update is done in the main thread
-        let barrier = Arc::new(Barrier::new(N_THREADS + 1));
+        let barrier = Arc::new(Barrier::new(num_threads + 1));
 
         // Spawn N_THREADS threads for computing the FW and BW pass
-        let threads = (0..N_THREADS)
+        let threads = (0..num_threads)
             .map(|_| {
                 let barrier = barrier.clone();
                 // Create a channel for sending inputs and labels from the main thread to the child threads
@@ -39,7 +44,6 @@ impl<const N_THREADS: usize> Model<N_THREADS> {
             state: ModelState { layers: Vec::new() },
             barrier,
             threads,
-            learning_rate,
         }
     }
 
@@ -49,6 +53,8 @@ impl<const N_THREADS: usize> Model<N_THREADS> {
         let input_size = self.state.layers.last().map(|layer| layer.size).unwrap_or(0);
 
         let new_layer = Layer::new(size, input_size, activator);
+
+        // Add the new layer to all child threads states
         for thread in self.threads.iter_mut() {
             thread.state.try_write().unwrap().layers.push(new_layer.clone());
         }
@@ -58,8 +64,8 @@ impl<const N_THREADS: usize> Model<N_THREADS> {
         self
     }
 
-    /// The inputs have to be `Arc<Vec<f64>>` so that they can be sent to the child threads safely and without cloning.
-    pub fn train_on_batch(&mut self, inputs: &[InputData], labels: &[InputData]) {
+    /// Trains the model on the given inputs and labels. The slices must be of the same size as the first layer.
+    pub fn train_on_batch(&mut self, inputs: &[InputData], labels: &[InputData], learning_rate: f64) {
         // Send inputs and labels to all threads
         for ((input, desired), thread) in inputs.iter().zip(labels).zip(&self.threads) {
             thread.sender.send((input.clone(), desired.clone())).unwrap();
@@ -69,14 +75,16 @@ impl<const N_THREADS: usize> Model<N_THREADS> {
         self.barrier.wait();
 
         // Update weights
-        self.update_weights();
+        self.update_weights(learning_rate);
     }
 
     /// Predicts the output for the given input. The input slice must be of the same size as the first layer.
     pub fn predict(&mut self, input: &[f64]) -> &[f64] {
         // Run the forward pass on the main thread
         self.state.feed_forward(input);
-        self.get_output()
+
+        // The output is the activation of the last layer
+        &self.state.layers.last().unwrap().activation[1..]
     }
 
     fn run_thread(
@@ -104,33 +112,28 @@ impl<const N_THREADS: usize> Model<N_THREADS> {
         }
     }
 
-    fn update_weights(&mut self) {
+    fn update_weights(&mut self, learning_rate: f64) {
         for thread in self.threads.iter_mut() {
             // It is safe to aquire the lock here, the child threads are waiting for the next input
             let mut state = thread.state.try_write().unwrap();
 
             state.layers.iter_mut().reduce(|layer_below, layer| {
+                // Scope for the RwLock
                 {
                     let mut inbound_weights = layer.inbound_weights.try_write().unwrap();
 
                     inbound_weights.iter_mut().zip(0..).for_each(|(weights, i)| {
                         weights.iter_mut().zip(0..layer_below.size).for_each(|(weight, j)| {
-                            *weight += self.learning_rate * layer.delta[i] * layer_below.activation[j]
+                            *weight += learning_rate * layer.delta[i] * layer_below.activation[j]
                         });
                     });
-                }
+                } // End of scope -> lock is released
 
                 layer
             });
         }
     }
-
-    fn get_output(&self) -> &[f64] {
-        &self.state.layers.last().expect("No layers in the model").activation[1..]
-    }
 }
-
-type InputData = Arc<Vec<f64>>;
 
 struct ThreadHandle {
     state: Arc<RwLock<ModelState>>,
@@ -143,18 +146,23 @@ struct ModelState {
 
 impl ModelState {
     fn feed_forward(&mut self, input: &[f64]) {
+        // Copy the input to the activation of the first layer using memcpy
         self.layers[0].activation[1..].copy_from_slice(input);
 
         self.layers.iter_mut().reduce(|layer_below, layer| {
+            // Scope for the RwLock
             {
                 let inbound_weights = layer.inbound_weights.try_read().unwrap();
+
+                // Compute the potential for each neuron in the layer
                 layer.potential[1..].iter_mut().zip(1..).for_each(|(potential, i)| {
                     *potential = (0..layer_below.size)
                         .map(|j| inbound_weights[i][j] * layer_below.activation[j])
                         .sum();
                 });
-            }
+            } // End of scope -> lock is released
 
+            // Apply the activation function to the potential
             layer.activation[1..].copy_from_slice(&layer.potential[1..]);
             layer.activator.apply(&mut layer.activation[1..]);
 
@@ -163,14 +171,19 @@ impl ModelState {
     }
 
     fn feed_backward(&mut self, desired: &[f64]) {
-        let output_layer = self.layers.last_mut().expect("No layers in the model");
+        let output_layer = self.layers.last_mut().unwrap();
+        // Compute the delta for each neuron in the output layer
         for i in 1..output_layer.size {
             output_layer.delta[i] = desired[i - 1] - output_layer.activation[i];
         }
 
         self.layers[1..].iter_mut().rev().reduce(|layer_above, layer| {
             let outbound_weights = layer_above.inbound_weights.try_read().unwrap();
+
+            // Apply the derivative of the activation function to the potential
             layer.activator.apply_prime(&mut layer.potential);
+
+            // Compute the delta for each neuron in the layer
             layer.delta.iter_mut().zip(0..).for_each(|(delta, i)| {
                 *delta = layer.potential[i]
                     * (0..layer_above.size)
