@@ -38,9 +38,9 @@ fn main() -> Result<()> {
     let t0 = std::time::Instant::now();
     let mut learning_rate = LEARNING_RATE;
 
-    print!("Training... ");
+    println!("Training... ");
 
-    for epoch in 0..NUM_EPOCHS {
+    for epoch in 1..=NUM_EPOCHS {
         // Shuffle the data at the beginning of each epoch
         let (train_data, train_labels) = shuffle_data(&train_data, &train_labels);
 
