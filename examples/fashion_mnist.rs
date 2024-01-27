@@ -4,8 +4,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Arc;
 
-use pv021_project::activators::Activator;
-use pv021_project::model::{InputData, Model};
+use nubnet::activators::Activator;
+use nubnet::model::{InputData, Model};
 
 // Hyperparameters
 const BATCH_SIZE: usize = 32;
@@ -28,12 +28,10 @@ fn main() -> Result<()> {
     let train_data = load_vectors(TRAIN_VECTORS_PATH)?;
     let train_labels = load_labels(TRAIN_LABELS_PATH)?;
 
-    let test_data = load_vectors(TEST_VECTORS_PATH)?;
-
     let mut model = Model::new(BATCH_SIZE)
         .with_layer(784, Activator::Identity)
         .with_layer(96, Activator::Tanh)
-        .with_layer(10, Activator::Softmax);
+        .with_layer(NUM_CLASSES, Activator::Softmax);
 
     let t0 = std::time::Instant::now();
     let mut learning_rate = LEARNING_RATE;
@@ -61,6 +59,8 @@ fn main() -> Result<()> {
 
     println!("Done (in {} seconds).", t0.elapsed().as_secs());
     println!("Exporting predictions...");
+
+    let test_data = load_vectors(TEST_VECTORS_PATH)?;
 
     export_predictions(&mut model, &train_data, TRAIN_PREDICTIONS_PATH)?;
     export_predictions(&mut model, &test_data, TEST_PREDICTIONS_PATH)?;
